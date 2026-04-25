@@ -6,12 +6,11 @@ import sqlite3
 from datetime import datetime
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
+import plotly.graph_objects as go
 
 DB = "live_trading_memory.db"
 
-# ─────────────────────────────
 # DATABASE
-# ─────────────────────────────
 def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -65,9 +64,7 @@ def load_logs():
     return df
 
 
-# ─────────────────────────────
 # DATA
-# ─────────────────────────────
 @st.cache_data(ttl=300)
 def fetch(ticker="NVDA", period="1y"):
     df = yf.Ticker(ticker).history(period=period, auto_adjust=True)
@@ -89,9 +86,7 @@ def get_company_info(ticker):
         return {"Info": "Limited data available"}
 
 
-# ─────────────────────────────
 # FEATURES
-# ─────────────────────────────
 def rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(period).mean()
@@ -112,9 +107,7 @@ def build_features(df):
     return df.dropna()
 
 
-# ─────────────────────────────
 # MODEL
-# ─────────────────────────────
 def train_model(df):
     df = df.copy()
 
@@ -150,9 +143,7 @@ def train_model(df):
     return signal, conf, train_acc, test_acc, df
 
 
-# ─────────────────────────────
 # ANOMALY
-# ─────────────────────────────
 def anomalies(df):
     vol = df["ret"].std()
     threshold = max(0.02, vol * 2.5)
@@ -160,9 +151,7 @@ def anomalies(df):
     return df, int(df["anomaly"].sum())
 
 
-# ─────────────────────────────
 # ENGINE
-# ─────────────────────────────
 def run(ticker="NVDA"):
     init_db()
 
@@ -192,14 +181,11 @@ def memory():
     return load_logs()
 
 
-# ─────────────────────────────
 # UI
-# ─────────────────────────────
 st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 
 st.title("🚀 AI Trading Dashboard")
 
-# Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
     "Overview",
     "Charts",
@@ -207,7 +193,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "History"
 ])
 
-# Styling
 st.markdown("""
 <style>
 .stMetric {
@@ -220,10 +205,9 @@ st.markdown("""
 
 ticker = st.text_input("Enter Stock Ticker", "NVDA")
 
-# ✅ FIXED COMPANY SNAPSHOT (OPTION 3)
+# Company Snapshot
 with tab1:
     st.subheader("📊 Company Snapshot")
-
     info = get_company_info(ticker)
 
     st.markdown(f"""
@@ -246,7 +230,7 @@ if st.button("Run AI Model"):
 
         color = "green" if result["prediction"] == "BUY" else "red"
 
-        # ───── OVERVIEW TAB ─────
+        # OVERVIEW
         with tab1:
             st.success("Model Executed")
 
@@ -257,25 +241,48 @@ if st.button("Run AI Model"):
 
             st.markdown(f"<h2 style='color:{color}'>{result['prediction']}</h2>", unsafe_allow_html=True)
 
-            col4, col5 = st.columns(2)
-            col4.metric("Train Accuracy", f"{result['train_acc']*100:.2f}%")
-            col5.metric("Test Accuracy", f"{result['test_acc']*100:.2f}%")
-
-        # ───── CHARTS TAB ─────
+        # CHARTS (PLOTLY ADDED)
         with tab2:
-            st.subheader("📈 Price Chart")
-            st.line_chart(df["Close"])
+            st.subheader("📈 Trading Chart")
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatter(
+                x=df.index,
+                y=df["Close"],
+                mode="lines",
+                name="Price"
+            ))
+
+            # Signal marker
+            fig.add_trace(go.Scatter(
+                x=[df.index[-1]],
+                y=[df["Close"].iloc[-1]],
+                mode="markers",
+                marker=dict(
+                    color="green" if result["prediction"] == "BUY" else "red",
+                    size=12
+                ),
+                name=result["prediction"]
+            ))
+
+            fig.update_layout(
+                template="plotly_dark",
+                title="Price with AI Signal"
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("📊 Volume")
             st.bar_chart(df["Volume"])
 
-        # ───── AI SIGNALS TAB ─────
+        # AI SIGNALS
         with tab3:
             st.subheader("🚨 Anomalies")
             st.write(anomaly_df[["Close", "ret"]])
             st.write("Total anomalies:", anomaly_count)
 
-        # ───── HISTORY TAB ─────
+        # HISTORY
         with tab4:
             st.subheader("📜 Trade History")
             st.dataframe(memory())
