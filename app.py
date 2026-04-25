@@ -220,10 +220,19 @@ st.markdown("""
 
 ticker = st.text_input("Enter Stock Ticker", "NVDA")
 
-# Overview tab (always visible info)
+# ✅ FIXED COMPANY SNAPSHOT (OPTION 3)
 with tab1:
     st.subheader("📊 Company Snapshot")
-    st.write(get_company_info(ticker))
+
+    info = get_company_info(ticker)
+
+    st.markdown(f"""
+    **Ticker:** {info.get("Ticker", "-")}  
+    **Last Price:** {info.get("Last Price", "-")}  
+    **Day High:** {info.get("Day High", "-")}  
+    **Day Low:** {info.get("Day Low", "-")}  
+    **Volume:** {info.get("Volume", "-")}  
+    """)
 
 
 if st.button("Run AI Model"):
