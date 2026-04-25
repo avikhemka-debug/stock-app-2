@@ -66,7 +66,7 @@ def load_logs():
 
 
 # ─────────────────────────────
-# SAFE DATA (CACHED)
+# DATA
 # ─────────────────────────────
 @st.cache_data(ttl=300)
 def fetch(ticker="NVDA", period="1y"):
@@ -74,7 +74,6 @@ def fetch(ticker="NVDA", period="1y"):
     return df.dropna()
 
 
-# ✅ SAFE COMPANY INFO (NO RATE LIMIT CRASH)
 def get_company_info(ticker):
     try:
         df = fetch(ticker, "5d")
@@ -87,7 +86,7 @@ def get_company_info(ticker):
             "Volume": int(df["Volume"].iloc[-1])
         }
     except:
-        return {"Info": "Limited data available (rate limited)"}
+        return {"Info": "Limited data available"}
 
 
 # ─────────────────────────────
@@ -200,6 +199,14 @@ st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 
 st.title("🚀 AI Trading Dashboard")
 
+# Tabs
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Overview",
+    "Charts",
+    "AI Signals",
+    "History"
+])
+
 # Styling
 st.markdown("""
 <style>
@@ -213,45 +220,56 @@ st.markdown("""
 
 ticker = st.text_input("Enter Stock Ticker", "NVDA")
 
-# SAFE INFO
-st.subheader("📊 Company Snapshot")
-st.write(get_company_info(ticker))
+# Overview tab (always visible info)
+with tab1:
+    st.subheader("📊 Company Snapshot")
+    st.write(get_company_info(ticker))
+
 
 if st.button("Run AI Model"):
     try:
         with st.spinner("Running AI model..."):
             result = run(ticker)
 
-        st.success("Model Executed")
-
-        color = "green" if result["prediction"] == "BUY" else "red"
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Prediction", result["prediction"])
-        col2.metric("Confidence", f"{result['confidence']*100:.2f}%")
-        col3.metric("Price", f"${result['close']:.2f}")
-
-        st.markdown(f"<h2 style='color:{color}'>{result['prediction']}</h2>", unsafe_allow_html=True)
-
         df = result["df"]
-
-        st.subheader("📈 Price Chart")
-        st.line_chart(df["Close"])
-
-        st.subheader("📊 Volume")
-        st.bar_chart(df["Volume"])
-
         df, anomaly_count = anomalies(df)
         anomaly_df = df[df["anomaly"] == True]
 
-        st.subheader("🚨 Anomalies")
-        st.write(anomaly_df[["Close", "ret"]])
+        color = "green" if result["prediction"] == "BUY" else "red"
 
-        st.write("Total anomalies:", anomaly_count)
+        # ───── OVERVIEW TAB ─────
+        with tab1:
+            st.success("Model Executed")
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Prediction", result["prediction"])
+            col2.metric("Confidence", f"{result['confidence']*100:.2f}%")
+            col3.metric("Price", f"${result['close']:.2f}")
+
+            st.markdown(f"<h2 style='color:{color}'>{result['prediction']}</h2>", unsafe_allow_html=True)
+
+            col4, col5 = st.columns(2)
+            col4.metric("Train Accuracy", f"{result['train_acc']*100:.2f}%")
+            col5.metric("Test Accuracy", f"{result['test_acc']*100:.2f}%")
+
+        # ───── CHARTS TAB ─────
+        with tab2:
+            st.subheader("📈 Price Chart")
+            st.line_chart(df["Close"])
+
+            st.subheader("📊 Volume")
+            st.bar_chart(df["Volume"])
+
+        # ───── AI SIGNALS TAB ─────
+        with tab3:
+            st.subheader("🚨 Anomalies")
+            st.write(anomaly_df[["Close", "ret"]])
+            st.write("Total anomalies:", anomaly_count)
+
+        # ───── HISTORY TAB ─────
+        with tab4:
+            st.subheader("📜 Trade History")
+            st.dataframe(memory())
 
     except Exception as e:
         st.error(f"Error: {e}")
-
-
-if st.checkbox("Show Trade History"):
-    st.dataframe(memory())
