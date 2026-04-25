@@ -66,25 +66,28 @@ def load_logs():
 
 
 # ─────────────────────────────
-# DATA
+# SAFE DATA (CACHED)
 # ─────────────────────────────
+@st.cache_data(ttl=300)
 def fetch(ticker="NVDA", period="1y"):
     df = yf.Ticker(ticker).history(period=period, auto_adjust=True)
     return df.dropna()
 
 
+# ✅ SAFE COMPANY INFO (NO RATE LIMIT CRASH)
 def get_company_info(ticker):
-    stock = yf.Ticker(ticker)
-    info = stock.info
+    try:
+        df = fetch(ticker, "5d")
 
-    return {
-        "Name": info.get("longName"),
-        "Sector": info.get("sector"),
-        "Market Cap": info.get("marketCap"),
-        "PE Ratio": info.get("trailingPE"),
-        "52W High": info.get("fiftyTwoWeekHigh"),
-        "52W Low": info.get("fiftyTwoWeekLow")
-    }
+        return {
+            "Ticker": ticker,
+            "Last Price": round(df["Close"].iloc[-1], 2),
+            "Day High": round(df["High"].iloc[-1], 2),
+            "Day Low": round(df["Low"].iloc[-1], 2),
+            "Volume": int(df["Volume"].iloc[-1])
+        }
+    except:
+        return {"Info": "Limited data available (rate limited)"}
 
 
 # ─────────────────────────────
@@ -159,7 +162,7 @@ def anomalies(df):
 
 
 # ─────────────────────────────
-# MAIN ENGINE
+# ENGINE
 # ─────────────────────────────
 def run(ticker="NVDA"):
     init_db()
@@ -197,7 +200,7 @@ st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 
 st.title("🚀 AI Trading Dashboard")
 
-# 🎨 Styling
+# Styling
 st.markdown("""
 <style>
 .stMetric {
@@ -210,14 +213,14 @@ st.markdown("""
 
 ticker = st.text_input("Enter Stock Ticker", "NVDA")
 
-# 📊 Company Info
-info = get_company_info(ticker)
-st.subheader("📊 Company Info")
-st.write(info)
+# SAFE INFO
+st.subheader("📊 Company Snapshot")
+st.write(get_company_info(ticker))
 
 if st.button("Run AI Model"):
-    with st.spinner("Running AI model..."):
-        result = run(ticker)
+    try:
+        with st.spinner("Running AI model..."):
+            result = run(ticker)
 
         st.success("Model Executed")
 
@@ -230,30 +233,25 @@ if st.button("Run AI Model"):
 
         st.markdown(f"<h2 style='color:{color}'>{result['prediction']}</h2>", unsafe_allow_html=True)
 
-        col4, col5 = st.columns(2)
-        col4.metric("Train Accuracy", f"{result['train_acc']*100:.2f}%")
-        col5.metric("Test Accuracy", f"{result['test_acc']*100:.2f}%")
-
         df = result["df"]
 
-        # 📈 Price Chart
         st.subheader("📈 Price Chart")
         st.line_chart(df["Close"])
 
-        # 📊 Volume
         st.subheader("📊 Volume")
         st.bar_chart(df["Volume"])
 
-        # 🚨 Anomalies
         df, anomaly_count = anomalies(df)
         anomaly_df = df[df["anomaly"] == True]
 
-        st.subheader("🚨 Anomalies Detected")
+        st.subheader("🚨 Anomalies")
         st.write(anomaly_df[["Close", "ret"]])
 
         st.write("Total anomalies:", anomaly_count)
 
+    except Exception as e:
+        st.error(f"Error: {e}")
+
 
 if st.checkbox("Show Trade History"):
-    logs = memory()
-    st.dataframe(logs)
+    st.dataframe(memory())
