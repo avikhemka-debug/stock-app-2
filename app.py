@@ -73,6 +73,20 @@ def fetch(ticker="NVDA", period="1y"):
     return df.dropna()
 
 
+def get_company_info(ticker):
+    stock = yf.Ticker(ticker)
+    info = stock.info
+
+    return {
+        "Name": info.get("longName"),
+        "Sector": info.get("sector"),
+        "Market Cap": info.get("marketCap"),
+        "PE Ratio": info.get("trailingPE"),
+        "52W High": info.get("fiftyTwoWeekHigh"),
+        "52W Low": info.get("fiftyTwoWeekLow")
+    }
+
+
 # ─────────────────────────────
 # FEATURES
 # ─────────────────────────────
@@ -167,7 +181,8 @@ def run(ticker="NVDA"):
         "close": close,
         "train_acc": train_acc,
         "test_acc": test_acc,
-        "anomalies": anomaly_count
+        "anomalies": anomaly_count,
+        "df": df
     }
 
 
@@ -176,13 +191,29 @@ def memory():
 
 
 # ─────────────────────────────
-# STREAMLIT UI
+# UI
 # ─────────────────────────────
 st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 
 st.title("🚀 AI Trading Dashboard")
 
+# 🎨 Styling
+st.markdown("""
+<style>
+.stMetric {
+    background-color: #111;
+    padding: 10px;
+    border-radius: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 ticker = st.text_input("Enter Stock Ticker", "NVDA")
+
+# 📊 Company Info
+info = get_company_info(ticker)
+st.subheader("📊 Company Info")
+st.write(info)
 
 if st.button("Run AI Model"):
     with st.spinner("Running AI model..."):
@@ -190,17 +221,37 @@ if st.button("Run AI Model"):
 
         st.success("Model Executed")
 
-        col1, col2, col3 = st.columns(3)
+        color = "green" if result["prediction"] == "BUY" else "red"
 
+        col1, col2, col3 = st.columns(3)
         col1.metric("Prediction", result["prediction"])
         col2.metric("Confidence", f"{result['confidence']*100:.2f}%")
         col3.metric("Price", f"${result['close']:.2f}")
+
+        st.markdown(f"<h2 style='color:{color}'>{result['prediction']}</h2>", unsafe_allow_html=True)
 
         col4, col5 = st.columns(2)
         col4.metric("Train Accuracy", f"{result['train_acc']*100:.2f}%")
         col5.metric("Test Accuracy", f"{result['test_acc']*100:.2f}%")
 
-        st.write("Anomalies detected:", result["anomalies"])
+        df = result["df"]
+
+        # 📈 Price Chart
+        st.subheader("📈 Price Chart")
+        st.line_chart(df["Close"])
+
+        # 📊 Volume
+        st.subheader("📊 Volume")
+        st.bar_chart(df["Volume"])
+
+        # 🚨 Anomalies
+        df, anomaly_count = anomalies(df)
+        anomaly_df = df[df["anomaly"] == True]
+
+        st.subheader("🚨 Anomalies Detected")
+        st.write(anomaly_df[["Close", "ret"]])
+
+        st.write("Total anomalies:", anomaly_count)
 
 
 if st.checkbox("Show Trade History"):
